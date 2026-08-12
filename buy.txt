@@ -1,24 +1,85 @@
+/**
+ * Se ejecuta con un trigger diario. Busca la fila cuya fecha es la de hoy,
+ * lee el gasto de esa fila (columna J) y envía el aviso por email.
+ */
 function enviarDatoSecuencial() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  var props = PropertiesService.getScriptProperties();
 
-  // Fila inicial (solo se usa la primera vez)
-  var fila = parseInt(props.getProperty("filaActual"));
+  // --- Configuración: columnas según el Sheet actual ---
+  var COL_FECHA = columnLetterToIndex('H'); // fecha
+  var COL_GASTO = columnLetterToIndex('J'); // gasto en soles
 
-  var dato = sheet.getRange(fila, 11).getValue(); // columna K
+  // Trae todo el rango con datos en una sola llamada (más rápido que
+  // pedir celda por celda). Como el Sheet crece indefinidamente,
+  // simplemente traerá más filas con el tiempo sin tocar el código.
+  var datos = sheet.getDataRange().getValues();
 
-  var email = 'cristopherhuamanfarfan@gmail.com';
-  var asunto = 'OE WEBONAZO MIRA TUS GASTOS';
+  // Fecha de hoy sin horas/minutos/segundos, para comparar solo el día.
+  var hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
 
-  var cuerpo;
-  if (dato == 0 || dato == '') {
-    cuerpo = 'No registraste gastos en la fila ' + fila;
-  } else {
-    cuerpo = 'ESPERO QUE HAYA VALIDO LA PENA ESTE DÍA, PORQUE GASTASTE: ' + dato;
+  var filaEncontrada = -1;
+
+  // i = 1 para saltar la fila de encabezados (fila 1 del Sheet).
+  for (var i = 1; i < datos.length; i++) {
+    var fechaFila = parsearFecha(datos[i][COL_FECHA]);
+    if (!fechaFila) continue; // fila sin fecha válida todavía
+
+    if (fechaFila.getTime() === hoy.getTime()) {
+      filaEncontrada = i;
+      break;
+    }
   }
 
-  MailApp.sendEmail(email, asunto, cuerpo);
+  var dato = filaEncontrada > -1 ? datos[filaEncontrada][COL_GASTO] : 0;
+  if (dato === '') dato = 0;
 
-  // Avanzar a la siguiente fila para mañana
-  props.setProperty("filaActual", fila + 1);
+  var cuerpo = (dato === 0)
+    ? 'No registraste gastos hoy.'
+    : 'ESPERO QUE HAYA VALIDO LA PENA ESTE DÍA, PORQUE GASTASTE: S/.' + Number(dato).toFixed(2);
+
+  var asunto = 'OE WEBONAZO MIRA TUS GASTOS';
+  MailApp.sendEmail('cristopherhuamanfarfan@gmail.com', asunto, cuerpo);
+}
+
+/**
+ * Convierte una letra de columna de Sheets (ej. 'H') a índice de arreglo
+ * base 0 (ej. 7). A=0, B=1, ..., H=7, J=9.
+ */
+function columnLetterToIndex(letra) {
+  return letra.toUpperCase().charCodeAt(0) - 'A'.charCodeAt(0);
+}
+
+/**
+ * Convierte el valor crudo de una celda de fecha en un objeto Date
+ * normalizado (sin horas), sin importar si Sheets lo entregó como:
+ *   a) un objeto Date real (columna con formato de fecha), o
+ *   b) un texto "dd/mm" o "dd/mm/yyyy" (columna con formato de texto).
+ * Devuelve null si la celda está vacía o no se pudo interpretar.
+ */
+function parsearFecha(valorCelda) {
+  if (!valorCelda) return null;
+
+  var fecha;
+
+  if (valorCelda instanceof Date) {
+    // Caso a): ya es una fecha real, la usamos tal cual.
+    fecha = new Date(valorCelda.getTime());
+  } else {
+    // Caso b): viene como texto, ej. "15/03" o "15/03/2026".
+    var texto = String(valorCelda).trim();
+    var partes = texto.split('/');
+    if (partes.length < 2) return null; // formato irreconocible
+
+    var dia = parseInt(partes[0], 10);
+    var mes = parseInt(partes[1], 10) - 1; // en JS los meses van de 0 (enero) a 11 (diciembre)
+    // Si no viene el año en el texto (ej. "15/03"), asumimos el año actual.
+    var anio = partes[2] ? parseInt(partes[2], 10) : new Date().getFullYear();
+
+    if (isNaN(dia) || isNaN(mes)) return null;
+    fecha = new Date(anio, mes, dia);
+  }
+
+  fecha.setHours(0, 0, 0, 0);
+  return fecha;
 }
