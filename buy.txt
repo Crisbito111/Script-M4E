@@ -4,7 +4,6 @@
  * bajo demanda por WhatsApp (Green API)
  * ============================================================
  */
-
 // --- CONFIGURACIÓN GENERAL ---
 var EMAIL_DESTINO = 'cristopherhuamanfarfan@gmail.com';
 var COL_LETRA_FECHA = 'H';
@@ -33,21 +32,58 @@ function enviarDatoSecuencial() {
  * te llega un mensaje de texto al WhatsApp vinculado (en tu caso, cuando
  * te escribes a ti mismo). Responde con el gasto de hoy por el mismo chat.
  */
-function doPost(e) {
-  var payload = JSON.parse(e.postData.contents);
+//function doPost(e) {
+  //var payload = JSON.parse(e.postData.contents);
 
   // Green API notifica varios tipos de eventos (mensaje entregado, leído,
   // etc.). Solo nos interesa un mensaje de texto entrante; el resto se ignora.
-  if (payload.typeWebhook !== 'incomingMessageReceived') {
-    return ContentService.createTextOutput('ignorado');
+  //if (payload.typeWebhook !== 'incomingMessageReceived') {
+    //return ContentService.createTextOutput('ignorado');
+  //}
+
+ // var chatId = payload.senderData.chatId;
+  //var cuerpo = construirMensajeGastoHoy();
+
+  //enviarWhatsApp(chatId, cuerpo);
+
+  //return ContentService.createTextOutput('ok');
+//}
+function doPost(e) {
+  try {
+    var payload = JSON.parse(e.postData.contents);
+    var miNumero = payload.instanceData.wid;
+
+    // Un mensaje "para el bot" puede llegar de dos formas distintas:
+    //
+    // a) alguien más te escribe → typeWebhook = "incomingMessageReceived"
+    //    (lo ignoramos siempre, no queremos responderle a otras personas)
+    //
+    // b) tú te escribes a ti mismo → typeWebhook = "outgoingMessageReceived",
+    //    y en ese caso chatId Y sender son igual a tu propio número (miNumero).
+    //    Ese es el ÚNICO caso en el que respondemos.
+    var esMensajeAMiMismo =
+      payload.typeWebhook === 'outgoingMessageReceived' &&
+      payload.senderData.chatId === miNumero &&
+      payload.senderData.sender === miNumero;
+
+    if (!esMensajeAMiMismo) {
+      return ContentService.createTextOutput('ignorado');
+    }
+
+    var chatId = payload.senderData.chatId;
+    var cuerpo = construirMensajeGastoHoy();
+    enviarWhatsApp(chatId, cuerpo);
+
+    return ContentService.createTextOutput('ok');
+
+  } catch (error) {
+    MailApp.sendEmail(
+      EMAIL_DESTINO,
+      'ERROR en doPost',
+      'Error: ' + error.message + '\n\nPayload recibido:\n' + e.postData.contents
+    );
+    return ContentService.createTextOutput('error registrado');
   }
-
-  var chatId = payload.senderData.chatId;
-  var cuerpo = construirMensajeGastoHoy();
-
-  enviarWhatsApp(chatId, cuerpo);
-
-  return ContentService.createTextOutput('ok');
 }
 
 
