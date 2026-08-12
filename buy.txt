@@ -1,0 +1,24 @@
+function enviarDatoSecuencial() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var props = PropertiesService.getScriptProperties();
+
+  // Fila inicial (solo se usa la primera vez)
+  var fila = parseInt(props.getProperty("filaActual"));
+
+  var dato = sheet.getRange(fila, 11).getValue(); // columna K
+
+  var email = 'cristopherhuamanfarfan@gmail.com';
+  var asunto = 'OE WEBONAZO MIRA TUS GASTOS';
+
+  var cuerpo;
+  if (dato == 0 || dato == '') {
+    cuerpo = 'No registraste gastos en la fila ' + fila;
+  } else {
+    cuerpo = 'ESPERO QUE HAYA VALIDO LA PENA ESTE DÍA, PORQUE GASTASTE: ' + dato;
+  }
+
+  MailApp.sendEmail(email, asunto, cuerpo);
+
+  // Avanzar a la siguiente fila para mañana
+  props.setProperty("filaActual", fila + 1);
+}
