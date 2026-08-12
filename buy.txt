@@ -1,46 +1,121 @@
 /**
- * Se ejecuta con un trigger diario. Busca la fila cuya fecha es la de hoy,
- * lee el gasto de esa fila (columna J) y envía el aviso por email.
+ * ============================================================
+ * TRACKER DE GASTOS - Notificación diaria por email + consulta
+ * bajo demanda por WhatsApp (Green API)
+ * ============================================================
+ */
+
+// --- CONFIGURACIÓN GENERAL ---
+var EMAIL_DESTINO = 'cristopherhuamanfarfan@gmail.com';
+var COL_LETRA_FECHA = 'H';
+var COL_LETRA_GASTO = 'J';
+
+// --- CONFIGURACIÓN GREEN API (WhatsApp) ---
+var GREEN_API_ID_INSTANCE = '710722708044';
+var GREEN_API_TOKEN = '9566c3a1568e4a6e9902f79951ae4b136e756646ffa54dd4a7'; // pégalo aquí, no lo compartas en chat
+var GREEN_API_URL = 'https://7107.api.greenapi.com';
+
+
+/**
+ * Se ejecuta con un trigger diario (ej. todos los días a las 8pm).
+ * Busca la fila de hoy en el Sheet, arma el mensaje del gasto de hoy,
+ * y lo envía por correo.
  */
 function enviarDatoSecuencial() {
+  var cuerpo = construirMensajeGastoHoy();
+  var asunto = 'OE WEBONAZO MIRA TUS GASTOS';
+  MailApp.sendEmail(EMAIL_DESTINO, asunto, cuerpo);
+}
+
+
+/**
+ * Green API llama a esta función automáticamente (POST) cada vez que
+ * te llega un mensaje de texto al WhatsApp vinculado (en tu caso, cuando
+ * te escribes a ti mismo). Responde con el gasto de hoy por el mismo chat.
+ */
+function doPost(e) {
+  var payload = JSON.parse(e.postData.contents);
+
+  // Green API notifica varios tipos de eventos (mensaje entregado, leído,
+  // etc.). Solo nos interesa un mensaje de texto entrante; el resto se ignora.
+  if (payload.typeWebhook !== 'incomingMessageReceived') {
+    return ContentService.createTextOutput('ignorado');
+  }
+
+  var chatId = payload.senderData.chatId;
+  var cuerpo = construirMensajeGastoHoy();
+
+  enviarWhatsApp(chatId, cuerpo);
+
+  return ContentService.createTextOutput('ok');
+}
+
+
+/**
+ * Lógica compartida por ambos flujos (email y WhatsApp): busca el gasto
+ * de hoy en el Sheet y arma el texto del mensaje. Centralizarla acá evita
+ * tener la misma lógica duplicada en dos funciones distintas.
+ */
+function construirMensajeGastoHoy() {
+  var gastoHoy = calcularGastoDeHoy();
+
+  return (gastoHoy === 0)
+    ? 'No registraste gastos hoy.'
+    : 'ESPERO QUE HAYA VALIDO LA PENA ESTE DÍA, PORQUE GASTASTE: S/.' + gastoHoy.toFixed(2);
+}
+
+
+/**
+ * Busca en el Sheet la fila cuya fecha es la de hoy y devuelve el gasto
+ * de esa fila como número. Devuelve 0 si no hay fila para hoy todavía
+ * o si la celda de gasto está vacía.
+ */
+function calcularGastoDeHoy() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
 
-  // --- Configuración: columnas según el Sheet actual ---
-  var COL_FECHA = columnLetterToIndex('H'); // fecha
-  var COL_GASTO = columnLetterToIndex('J'); // gasto en soles
+  var colFecha = columnLetterToIndex(COL_LETRA_FECHA);
+  var colGasto = columnLetterToIndex(COL_LETRA_GASTO);
 
-  // Trae solo las columnas H a J hasta la última fila con datos
+  // Trae solo las columnas entre fecha y gasto, hasta la última fila con datos.
+  // Como el Sheet crece indefinidamente, esto simplemente traerá más filas
+  // con el tiempo, sin que haya que tocar el código.
   var lastRow = sheet.getLastRow();
-  var datos = sheet.getRange(1, COL_FECHA+1, lastRow, (COL_GASTO - COL_FECHA) + 1).getValues();
+  var datos = sheet.getRange(1, colFecha + 1, lastRow, (colGasto - colFecha) + 1).getValues();
 
-  // Fecha de hoy sin horas/minutos/segundos, para comparar solo el día.
   var hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
 
-  var filaEncontrada = -1;
-
   // i = 1 para saltar la fila de encabezados (fila 1 del Sheet).
   for (var i = 1; i < datos.length; i++) {
-    var fechaFila = parsearFecha(datos[i][0]); // H es la primera columna del rango
-    if (!fechaFila) continue; // fila sin fecha válida todavía
+    var fechaFila = parsearFecha(datos[i][0]); // primera columna del rango = fecha
+    if (!fechaFila) continue;
 
     if (fechaFila.getTime() === hoy.getTime()) {
-      filaEncontrada = i;
-      break;
+      var gasto = datos[i][datos[i].length - 1]; // última columna del rango = gasto
+      return gasto === '' ? 0 : Number(gasto);
     }
   }
 
-  // J es la última columna del rango → índice relativo 2
-  var dato = filaEncontrada > -1 ? datos[filaEncontrada][2] : 0;
-  if (dato === '') dato = 0;
-
-  var cuerpo = (dato === 0)
-    ? 'No registraste gastos hoy.'
-    : 'ESPERO QUE HAYA VALIDO LA PENA ESTE DÍA, PORQUE GASTASTE: S/.' + Number(dato).toFixed(2);
-
-  var asunto = 'OE WEBONAZO MIRA TUS GASTOS';
-  MailApp.sendEmail('cristopherhuamanfarfan@gmail.com', asunto, cuerpo);
+  return 0; // no hay fila para hoy todavía
 }
+
+
+/**
+ * Envía un mensaje de texto por WhatsApp usando la API REST de Green API.
+ */
+function enviarWhatsApp(chatId, mensaje) {
+  var url = GREEN_API_URL + '/waInstance' + GREEN_API_ID_INSTANCE
+    + '/sendMessage/' + GREEN_API_TOKEN;
+
+  var opciones = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({ chatId: chatId, message: mensaje })
+  };
+
+  UrlFetchApp.fetch(url, opciones);
+}
+
 
 /**
  * Convierte una letra de columna de Sheets (ej. 'H') a índice de arreglo
@@ -49,6 +124,7 @@ function enviarDatoSecuencial() {
 function columnLetterToIndex(letra) {
   return letra.toUpperCase().charCodeAt(0) - 'A'.charCodeAt(0);
 }
+
 
 /**
  * Convierte el valor crudo de una celda de fecha en un objeto Date
@@ -79,21 +155,4 @@ function parsearFecha(valorCelda) {
 
   fecha.setHours(0, 0, 0, 0);
   return fecha;
-}
-
-function enviarWhatsApp(chatId, mensaje) {
-  var ID_INSTANCE = '710722708044';   // tu idInstance
-  var API_TOKEN = '...'; // el que revelaste con el ojito
-  var API_URL = 'https://7107.api.greenapi.com';  // tu apiUrl específico, no el genérico
-
-  var url = API_URL + '/waInstance' + ID_INSTANCE
-    + '/sendMessage/' + API_TOKEN;
-
-  var opciones = {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify({ chatId: chatId, message: mensaje })
-  };
-
-  UrlFetchApp.fetch(url, opciones);
 }
