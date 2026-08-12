@@ -80,3 +80,20 @@ function parsearFecha(valorCelda) {
   fecha.setHours(0, 0, 0, 0);
   return fecha;
 }
+
+function enviarWhatsApp(chatId, mensaje) {
+  var ID_INSTANCE = '710722708044';   // tu idInstance
+  var API_TOKEN = '...'; // el que revelaste con el ojito
+  var API_URL = 'https://7107.api.greenapi.com';  // tu apiUrl específico, no el genérico
+
+  var url = API_URL + '/waInstance' + ID_INSTANCE
+    + '/sendMessage/' + API_TOKEN;
+
+  var opciones = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({ chatId: chatId, message: mensaje })
+  };
+
+  UrlFetchApp.fetch(url, opciones);
+}
