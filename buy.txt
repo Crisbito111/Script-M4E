@@ -9,10 +9,9 @@ function enviarDatoSecuencial() {
   var COL_FECHA = columnLetterToIndex('H'); // fecha
   var COL_GASTO = columnLetterToIndex('J'); // gasto en soles
 
-  // Trae todo el rango con datos en una sola llamada (más rápido que
-  // pedir celda por celda). Como el Sheet crece indefinidamente,
-  // simplemente traerá más filas con el tiempo sin tocar el código.
-  var datos = sheet.getDataRange().getValues();
+  // Trae solo las columnas H a J hasta la última fila con datos
+  var lastRow = sheet.getLastRow();
+  var datos = sheet.getRange(1, COL_FECHA+1, lastRow, (COL_GASTO - COL_FECHA) + 1).getValues();
 
   // Fecha de hoy sin horas/minutos/segundos, para comparar solo el día.
   var hoy = new Date();
@@ -22,7 +21,7 @@ function enviarDatoSecuencial() {
 
   // i = 1 para saltar la fila de encabezados (fila 1 del Sheet).
   for (var i = 1; i < datos.length; i++) {
-    var fechaFila = parsearFecha(datos[i][COL_FECHA]);
+    var fechaFila = parsearFecha(datos[i][0]); // H es la primera columna del rango
     if (!fechaFila) continue; // fila sin fecha válida todavía
 
     if (fechaFila.getTime() === hoy.getTime()) {
@@ -31,7 +30,8 @@ function enviarDatoSecuencial() {
     }
   }
 
-  var dato = filaEncontrada > -1 ? datos[filaEncontrada][COL_GASTO] : 0;
+  // J es la última columna del rango → índice relativo 2
+  var dato = filaEncontrada > -1 ? datos[filaEncontrada][2] : 0;
   if (dato === '') dato = 0;
 
   var cuerpo = (dato === 0)
@@ -63,17 +63,14 @@ function parsearFecha(valorCelda) {
   var fecha;
 
   if (valorCelda instanceof Date) {
-    // Caso a): ya es una fecha real, la usamos tal cual.
     fecha = new Date(valorCelda.getTime());
   } else {
-    // Caso b): viene como texto, ej. "15/03" o "15/03/2026".
     var texto = String(valorCelda).trim();
     var partes = texto.split('/');
-    if (partes.length < 2) return null; // formato irreconocible
+    if (partes.length < 2) return null;
 
     var dia = parseInt(partes[0], 10);
-    var mes = parseInt(partes[1], 10) - 1; // en JS los meses van de 0 (enero) a 11 (diciembre)
-    // Si no viene el año en el texto (ej. "15/03"), asumimos el año actual.
+    var mes = parseInt(partes[1], 10) - 1;
     var anio = partes[2] ? parseInt(partes[2], 10) : new Date().getFullYear();
 
     if (isNaN(dia) || isNaN(mes)) return null;
