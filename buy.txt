@@ -1,18 +1,19 @@
-/**
- * ============================================================
- * TRACKER DE GASTOS - Notificación diaria por email + consulta
- * bajo demanda por WhatsApp (Green API)
- * ============================================================
- */
+//**
+ //============================================================
+ //TRACKER DE GASTOS - Notificación diaria por email
+ //(WhatsApp / Green API desactivado, código comentado por si
+ // se quiere reactivar más adelante)
+// ============================================================
+//
 // --- CONFIGURACIÓN GENERAL ---
 var EMAIL_DESTINO = 'cristopherhuamanfarfan@gmail.com';
 var COL_LETRA_FECHA = 'H';
 var COL_LETRA_GASTO = 'J';
 
-// --- CONFIGURACIÓN GREEN API (WhatsApp) ---
-var GREEN_API_ID_INSTANCE = '710722708044';
-var GREEN_API_TOKEN = '9566c3a1568e4a6e9902f79951ae4b136e756646ffa54dd4a7'; // pégalo aquí, no lo compartas en chat
-var GREEN_API_URL = 'https://7107.api.greenapi.com';
+// --- CONFIGURACIÓN GREEN API (WhatsApp) — YA NO SE USA ---
+// var GREEN_API_ID_INSTANCE = '710722708044';
+// var GREEN_API_TOKEN = '9566c3a1568e4a6e9902f79951ae4b136e756646ffa54dd4a7';
+// var GREEN_API_URL = 'https://7107.api.greenapi.com';
 
 
 /**
@@ -28,69 +29,8 @@ function enviarDatoSecuencial() {
 
 
 /**
- * Green API llama a esta función automáticamente (POST) cada vez que
- * te llega un mensaje de texto al WhatsApp vinculado (en tu caso, cuando
- * te escribes a ti mismo). Responde con el gasto de hoy por el mismo chat.
- */
-//function doPost(e) {
-  //var payload = JSON.parse(e.postData.contents);
-
-  // Green API notifica varios tipos de eventos (mensaje entregado, leído,
-  // etc.). Solo nos interesa un mensaje de texto entrante; el resto se ignora.
-  //if (payload.typeWebhook !== 'incomingMessageReceived') {
-    //return ContentService.createTextOutput('ignorado');
-  //}
-
- // var chatId = payload.senderData.chatId;
-  //var cuerpo = construirMensajeGastoHoy();
-
-  //enviarWhatsApp(chatId, cuerpo);
-
-  //return ContentService.createTextOutput('ok');
-//}
-function doPost(e) {
-  try {
-    var payload = JSON.parse(e.postData.contents);
-    var miNumero = payload.instanceData.wid;
-
-    // Un mensaje "para el bot" puede llegar de dos formas distintas:
-    //
-    // a) alguien más te escribe → typeWebhook = "incomingMessageReceived"
-    //    (lo ignoramos siempre, no queremos responderle a otras personas)
-    //
-    // b) tú te escribes a ti mismo → typeWebhook = "outgoingMessageReceived",
-    //    y en ese caso chatId Y sender son igual a tu propio número (miNumero).
-    //    Ese es el ÚNICO caso en el que respondemos.
-    var esMensajeAMiMismo =
-      payload.typeWebhook === 'outgoingMessageReceived' &&
-      payload.senderData.chatId === miNumero &&
-      payload.senderData.sender === miNumero;
-
-    if (!esMensajeAMiMismo) {
-      return ContentService.createTextOutput('ignorado');
-    }
-
-    var chatId = payload.senderData.chatId;
-    var cuerpo = construirMensajeGastoHoy();
-    enviarWhatsApp(chatId, cuerpo);
-
-    return ContentService.createTextOutput('ok');
-
-  } catch (error) {
-    MailApp.sendEmail(
-      EMAIL_DESTINO,
-      'ERROR en doPost',
-      'Error: ' + error.message + '\n\nPayload recibido:\n' + e.postData.contents
-    );
-    return ContentService.createTextOutput('error registrado');
-  }
-}
-
-
-/**
- * Lógica compartida por ambos flujos (email y WhatsApp): busca el gasto
- * de hoy en el Sheet y arma el texto del mensaje. Centralizarla acá evita
- * tener la misma lógica duplicada en dos funciones distintas.
+ * Lógica compartida: busca el gasto de hoy en el Sheet y arma el texto
+ * del mensaje.
  */
 function construirMensajeGastoHoy() {
   var gastoHoy = calcularGastoDeHoy();
@@ -99,6 +39,52 @@ function construirMensajeGastoHoy() {
     ? 'No registraste gastos hoy.'
     : 'ESPERO QUE HAYA VALIDO LA PENA ESTE DÍA, PORQUE GASTASTE: S/.' + gastoHoy.toFixed(2);
 }
+
+
+// --- WHATSAPP / GREEN API — DESACTIVADO ---
+//
+// function doPost(e) {
+//   try {
+//     var payload = JSON.parse(e.postData.contents);
+//     var miNumero = payload.instanceData.wid;
+//
+//     var esMensajeAMiMismo =
+//       payload.typeWebhook === 'outgoingMessageReceived' &&
+//       payload.senderData.chatId === miNumero &&
+//       payload.senderData.sender === miNumero;
+//
+//     if (!esMensajeAMiMismo) {
+//       return ContentService.createTextOutput('ignorado');
+//     }
+//
+//     var chatId = payload.senderData.chatId;
+//     var cuerpo = construirMensajeGastoHoy();
+//     enviarWhatsApp(chatId, cuerpo);
+//
+//     return ContentService.createTextOutput('ok');
+//
+//   } catch (error) {
+//     MailApp.sendEmail(
+//       EMAIL_DESTINO,
+//       'ERROR en doPost',
+//       'Error: ' + error.message + '\n\nPayload recibido:\n' + e.postData.contents
+//     );
+//     return ContentService.createTextOutput('error registrado');
+//   }
+// }
+//
+// function enviarWhatsApp(chatId, mensaje) {
+//   var url = GREEN_API_URL + '/waInstance' + GREEN_API_ID_INSTANCE
+//     + '/sendMessage/' + GREEN_API_TOKEN;
+//
+//   var opciones = {
+//     method: 'post',
+//     contentType: 'application/json',
+//     payload: JSON.stringify({ chatId: chatId, message: mensaje })
+//   };
+//
+//   UrlFetchApp.fetch(url, opciones);
+// }
 
 
 /**
@@ -112,44 +98,23 @@ function calcularGastoDeHoy() {
   var colFecha = columnLetterToIndex(COL_LETRA_FECHA);
   var colGasto = columnLetterToIndex(COL_LETRA_GASTO);
 
-  // Trae solo las columnas entre fecha y gasto, hasta la última fila con datos.
-  // Como el Sheet crece indefinidamente, esto simplemente traerá más filas
-  // con el tiempo, sin que haya que tocar el código.
   var lastRow = sheet.getLastRow();
   var datos = sheet.getRange(1, colFecha + 1, lastRow, (colGasto - colFecha) + 1).getValues();
 
   var hoy = new Date();
   hoy.setHours(0, 0, 0, 0);
 
-  // i = 1 para saltar la fila de encabezados (fila 1 del Sheet).
   for (var i = 1; i < datos.length; i++) {
-    var fechaFila = parsearFecha(datos[i][0]); // primera columna del rango = fecha
+    var fechaFila = parsearFecha(datos[i][0]);
     if (!fechaFila) continue;
 
     if (fechaFila.getTime() === hoy.getTime()) {
-      var gasto = datos[i][datos[i].length - 1]; // última columna del rango = gasto
+      var gasto = datos[i][datos[i].length - 1];
       return gasto === '' ? 0 : Number(gasto);
     }
   }
 
-  return 0; // no hay fila para hoy todavía
-}
-
-
-/**
- * Envía un mensaje de texto por WhatsApp usando la API REST de Green API.
- */
-function enviarWhatsApp(chatId, mensaje) {
-  var url = GREEN_API_URL + '/waInstance' + GREEN_API_ID_INSTANCE
-    + '/sendMessage/' + GREEN_API_TOKEN;
-
-  var opciones = {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify({ chatId: chatId, message: mensaje })
-  };
-
-  UrlFetchApp.fetch(url, opciones);
+  return 0;
 }
 
 
@@ -164,9 +129,8 @@ function columnLetterToIndex(letra) {
 
 /**
  * Convierte el valor crudo de una celda de fecha en un objeto Date
- * normalizado (sin horas), sin importar si Sheets lo entregó como:
- *   a) un objeto Date real (columna con formato de fecha), o
- *   b) un texto "dd/mm" o "dd/mm/yyyy" (columna con formato de texto).
+ * normalizado (sin horas), sin importar si Sheets lo entregó como
+ * un objeto Date real o un texto "dd/mm" o "dd/mm/yyyy".
  * Devuelve null si la celda está vacía o no se pudo interpretar.
  */
 function parsearFecha(valorCelda) {
